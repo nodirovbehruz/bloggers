@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+
+# Build
+.next/
+.vercel/
+
+# Environment
+.env
+.env.local
+*.db
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (keep dir, ignore files)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Misc
+*.log
