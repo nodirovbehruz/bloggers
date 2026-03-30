@@ -261,14 +261,13 @@
 }
 
 /* ===== Sponsor Marquee ===== */
-@keyframes marquee-right {
+@keyframes marquee-left {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
 
-@keyframes marquee-left {
-  0% { transform: translateX(-50%); }
-  100% { transform: translateX(0); }
+.animate-scroll-left {
+  animation: marquee-left 30s linear infinite;
 }
 
 /* ===== Button hover lift ===== */

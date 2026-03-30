@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '../lib/api';
-import { FiUpload, FiCheck, FiAlertCircle, FiImage } from 'react-icons/fi';
+import { FiUpload, FiCheck, FiAlertCircle, FiImage, FiDollarSign } from 'react-icons/fi';
 import { useLanguage } from '../contexts/LanguageContext';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1').replace('/api/v1', '');
@@ -23,17 +24,32 @@ export default function RegisterPage() {
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [sponsors, setSponsors] = useState([]);
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const { t, localizedName } = useLanguage();
 
+  const router = useRouter();
+
   useEffect(() => {
-    api.getCategories().then(cats => {
+    console.log("Checking RegisterPage Auth...");
+    // Immediate redirect if not logged in
+    if (!api.isUserLoggedIn()) {
+      console.log("Not logged in, redirecting to login...");
+      router.replace('/login?redirect=/register');
+      return;
+    }
+
+    Promise.all([
+      api.getCategories().catch(() => []),
+      api.getSponsors().catch(() => []),
+    ]).then(([cats, spon]) => {
       setCategories(Array.isArray(cats) ? cats : []);
-    }).catch(() => {});
-  }, []);
+      setSponsors(Array.isArray(spon) ? spon : []);
+    });
+  }, [router]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -124,10 +140,35 @@ export default function RegisterPage() {
           <p className="text-text-muted text-sm">
             Мы уведомим вас о результате проверки в ближайшее время.
           </p>
-          <div className="mt-8 inline-flex items-center gap-2 glass rounded-full px-4 py-2">
+          <div className="mt-8 mb-4 inline-flex items-center gap-2 glass rounded-full px-4 py-2">
             <span className="w-2 h-2 bg-warning rounded-full pulse-dot"></span>
             <span className="text-sm text-text-secondary">Статус: ожидает модерации</span>
           </div>
+
+          {/* Sponsors Section on Success */}
+          {sponsors.length > 0 && (
+            <div className="mt-12 pt-10 border-t border-white/5 animate-fade-in">
+              <p className="text-text-muted text-[10px] font-black uppercase tracking-[4px] mb-8 opacity-50">Наши партнеры</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {sponsors.slice(0, 6).map((s, i) => {
+                   const logoSrc = s.logo_url ? (s.logo_url.startsWith('/uploads') ? `${API_BASE}${s.logo_url}` : s.logo_url) : null;
+                   return (
+                     <div key={i} className="flex items-center justify-center p-5 bg-white/[0.02] rounded-2xl border border-white/5 transition-all group hover:bg-white/[0.05] hover:border-primary/20">
+                        {logoSrc ? (
+                          <img 
+                            src={logoSrc} 
+                            alt={s.name} 
+                            className="max-h-10 w-auto object-contain grayscale opacity-30 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500" 
+                          />
+                        ) : (
+                          <span className="text-[10px] text-white/40 font-bold truncate group-hover:text-white/60">{s.name}</span>
+                        )}
+                     </div>
+                   );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -147,6 +188,21 @@ export default function RegisterPage() {
             <p className="text-text-secondary text-sm">
               {t('register_subtitle')}
             </p>
+          </div>
+
+          {/* Revenue share info */}
+          <div className="mb-6 p-4 rounded-2xl bg-primary/10 border border-primary/20 flex gap-4 items-start animate-fade-in">
+            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0">
+               <FiDollarSign size={24} />
+            </div>
+            <div>
+              <h4 className="text-white font-bold text-sm mb-1">Доход от голосов</h4>
+              <p className="text-text-secondary text-xs leading-relaxed">
+                Вы получаете <span className="text-primary font-black">30%</span> от общей суммы всех платных голосов (донатов). 
+                Например, если вам задонатят <span className="text-white font-bold">1 000 000 сум</span>, 
+                ваша выплата составит <span className="text-success font-black">300 000 сум</span>.
+              </p>
+            </div>
           </div>
 
           {/* API Error */}

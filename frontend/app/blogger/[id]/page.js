@@ -238,7 +238,7 @@ export default function BloggerPage() {
 // ==========================================
 function VoteModal({ blogger, category, onClose, onVoteSuccess }) {
   const [selectedType, setSelectedType] = useState(null);
-  const [promoCode, setPromoCode] = useState('');
+  const [customVoteCount, setCustomVoteCount] = useState(100);
   const [voteResult, setVoteResult] = useState(null); // null | 'success' | 'error'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -246,13 +246,19 @@ function VoteModal({ blogger, category, onClose, onVoteSuccess }) {
   const { t, localizedName } = useLanguage();
 
   // VIP pricing
-  const VIP_PRICE = 10000; // сум
   const vipPackages = [
     { count: 1, price: 10000, label: '1 голос', popular: false },
     { count: 5, price: 45000, label: '5 голосов', popular: false, save: '10%' },
     { count: 10, price: 80000, label: '10 голосов', popular: true, save: '20%' },
     { count: 50, price: 350000, label: '50 голосов', popular: false, save: '30%' },
   ];
+
+  const calculatePrice = (count) => {
+    if (count >= 50) return count * 7000;
+    if (count >= 10) return count * 8000;
+    if (count >= 5) return count * 9000;
+    return count * 10000;
+  };
 
   const handleFreeVote = async () => {
     setLoading(true);
@@ -262,6 +268,7 @@ function VoteModal({ blogger, category, onClose, onVoteSuccess }) {
       const res = await api.castVote({
         blogger_id: blogger.id,
         vote_type: 'free',
+        count: 1
       });
       setVoteResult('success');
       onVoteSuccess(res.total_votes);
@@ -274,22 +281,23 @@ function VoteModal({ blogger, category, onClose, onVoteSuccess }) {
     }
   };
 
-  const handleVipVote = async (pkg) => {
+  const handleVipVote = async (pkgOrCount) => {
+    const count = typeof pkgOrCount === 'number' ? pkgOrCount : pkgOrCount.count;
+    if (count < 1) return;
+    
     setLoading(true);
     setSelectedType('vip');
-    setVoteCount(pkg.count);
+    setVoteCount(count);
     setError('');
     try {
-      // For each vote in the package
-      let lastRes;
-      for (let i = 0; i < pkg.count; i++) {
-        lastRes = await api.castVote({
-          blogger_id: blogger.id,
-          vote_type: 'vip',
-        });
-      }
+      // Send single request with count instead of looping
+      const res = await api.castVote({
+        blogger_id: blogger.id,
+        vote_type: 'vip',
+        count: count
+      });
       setVoteResult('success');
-      onVoteSuccess(lastRes.total_votes);
+      onVoteSuccess(res.total_votes);
       setTimeout(() => onClose(), 2000);
     } catch (err) {
       setError(err.detail || 'Ошибка оплаты');
@@ -309,6 +317,7 @@ function VoteModal({ blogger, category, onClose, onVoteSuccess }) {
         blogger_id: blogger.id,
         vote_type: 'promo',
         promo_code: promoCode.trim(),
+        count: 1
       });
       setVoteResult('success');
       onVoteSuccess(res.total_votes);
@@ -354,7 +363,7 @@ function VoteModal({ blogger, category, onClose, onVoteSuccess }) {
               <CategoryIcon slug={category.slug} size={12} /> {localizedName(category)}
             </span>
           )}
-          <h2 className="text-xl font-heading font-bold text-white">{t('vote_choose_type')}</h2>
+          <h2 className="text-xl font-heading font-bold text-white">Выбор типа голоса</h2>
         </div>
 
         {/* Success state */}
@@ -372,149 +381,212 @@ function VoteModal({ blogger, category, onClose, onVoteSuccess }) {
           </div>
         )}
 
-
         {/* Vote options */}
         {voteResult !== 'success' && (
-          <div className="px-6 pb-6 space-y-4">
-            {/* ===== FREE VOTE ===== */}
-            <div className="glass rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">❤️</span>
-                  <div>
-                    <span className="text-white font-semibold">{t('vote_free')}</span>
-                    <p className="text-text-muted text-xs">{t('vote_free_desc')}</p>
-                  </div>
-                </div>
-                <span className="text-success font-bold text-sm bg-success/10 px-3 py-1 rounded-full">FREE</span>
-              </div>
-
-              {/* Free vote error - shown here only */}
-              {voteResult === 'error' && selectedType === 'free' && (
-                <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/20 flex items-center gap-2 mb-3">
-                  <FiAlertCircle className="text-danger shrink-0" size={14} />
-                  <p className="text-danger text-xs">{error}</p>
-                </div>
-              )}
-
-              <button
-                onClick={handleFreeVote}
-                disabled={loading}
-                className="w-full gradient-bg text-white font-semibold py-3 rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 vote-btn flex items-center justify-center gap-2"
-                id="vote-free-btn"
-              >
-                {loading && selectedType === 'free' ? (
-                  <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>Голосование...</>
-                ) : (
-                  <><FiHeart size={16} />{t('vote_free_btn')}</>
-                )}
-              </button>
-            </div>
-
-            {/* ===== VIP VOTES ===== */}
-            <div className="glass rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-xl">⭐</span>
-                <div>
-                  <span className="text-white font-semibold">VIP голоса</span>
-                  <p className="text-text-muted text-xs">Неограниченно, с оплатой</p>
-                </div>
-              </div>
-
-              {/* VIP error - shown here only */}
-              {voteResult === 'error' && selectedType === 'vip' && (
-                <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/20 flex items-center gap-2 mb-3">
-                  <FiAlertCircle className="text-danger shrink-0" size={14} />
-                  <p className="text-danger text-xs">{error}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {vipPackages.map((pkg) => (
-                  <button
-                    key={pkg.count}
-                    onClick={() => handleVipVote(pkg)}
-                    disabled={loading}
-                    className={`relative p-3 rounded-xl border text-center transition-all disabled:opacity-50 ${
-                      pkg.popular
-                        ? 'border-primary bg-primary/10 hover:bg-primary/20'
-                        : 'border-border hover:border-primary/50 hover:bg-surface-hover'
-                    }`}
-                    id={`vote-vip-${pkg.count}`}
-                  >
-                    {pkg.popular && (
-                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[10px] gradient-bg text-white px-2 py-0.5 rounded-full font-bold">
-                        ХИТ
-                      </span>
-                    )}
-                    {pkg.save && (
-                      <span className="absolute -top-2 right-1 text-[10px] bg-success text-white px-1.5 py-0.5 rounded-full font-bold">
-                        -{pkg.save}
-                      </span>
-                    )}
-                    <div className="text-white font-bold text-lg">{pkg.count}</div>
-                    <div className="text-text-muted text-xs mb-1">{pkg.count > 1 ? 'голосов' : 'голос'}</div>
-                    <div className="text-warning font-bold text-sm">{formatPrice(pkg.price)} сум</div>
-                  </button>
-                ))}
-              </div>
-
-              {loading && selectedType === 'vip' && (
-                <div className="flex items-center justify-center gap-2 py-2 text-warning">
-                  <div className="w-4 h-4 border-2 border-warning/30 border-t-warning rounded-full animate-spin"></div>
-                  <span className="text-sm font-medium">Обработка оплаты...</span>
-                </div>
-              )}
-
-              <div className="flex items-center justify-center gap-4 pt-2 border-t border-border/50">
-                <span className="text-xs text-text-muted">Оплата через:</span>
-                <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-0.5 rounded font-semibold">Payme</span>
-                <span className="text-xs bg-cyan-600/20 text-cyan-400 px-2 py-0.5 rounded font-semibold">Click</span>
-                <span className="text-xs bg-purple-600/20 text-purple-400 px-2 py-0.5 rounded font-semibold">Uzum</span>
-              </div>
-            </div>
-
-            {/* ===== PROMO CODE ===== */}
-            <div className="glass rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-xl">🎁</span>
-                <div>
-                  <span className="text-white font-semibold text-sm">Промокод от спонсора</span>
-                  <p className="text-text-muted text-xs">Бесплатный голос по промокоду</p>
-                </div>
-              </div>
-
-              {/* Promo error - shown here only */}
-              {voteResult === 'error' && selectedType === 'promo' && (
-                <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/20 flex items-center gap-2 mb-3">
-                  <FiAlertCircle className="text-danger shrink-0" size={14} />
-                  <p className="text-danger text-xs">{error}</p>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                  placeholder="Введите промокод"
-                  className="flex-1 bg-surface border border-border rounded-lg px-3 py-2.5 text-white text-sm placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors font-mono tracking-wider"
-                  id="promo-code-input"
-                />
+          <div className="px-6 pb-6">
+            {!selectedType ? (
+              /* Step 1: Choose Vote Type */
+              <div className="space-y-4">
                 <button
-                  onClick={handlePromoVote}
-                  disabled={loading || !promoCode.trim()}
-                  className="gradient-bg text-white text-sm font-semibold px-4 py-2.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-1"
-                  id="promo-vote-btn"
+                  onClick={handleFreeVote}
+                  disabled={loading}
+                  className="w-full glass p-5 rounded-2xl flex items-center justify-between group transition-all duration-300 hover:border-primary/50 hover:bg-white/[0.04]"
                 >
-                  {loading && selectedType === 'promo' ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  ) : (
-                    <><FiGift size={14} />Применить</>
-                  )}
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-vote-free/10 flex items-center justify-center text-vote-free">
+                      <FiHeart size={24} className="fill-current" />
+                    </div>
+                    <div className="text-left">
+                      <h4 className="text-white font-bold">{t('vote_free')}</h4>
+                      <p className="text-text-muted text-xs leading-tight">{t('vote_free_desc') || 'Бесплатный голос раз в сутки'}</p>
+                    </div>
+                  </div>
+                  <div className="text-text-muted group-hover:text-white group-hover:translate-x-1 transition-all">
+                    <FiArrowLeft className="rotate-180" size={20} />
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setSelectedType('vip_choice')}
+                  className="w-full glass p-5 rounded-2xl flex items-center justify-between group transition-all duration-300 border-primary/20 bg-primary/[0.02] hover:bg-primary/[0.06] hover:border-primary/50"
+                  id="choice-vip-btn"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
+                      <FiStar size={24} className="fill-current" />
+                    </div>
+                    <div className="text-left">
+                      <h4 className="text-white font-bold">VIP голоса</h4>
+                      <p className="text-text-muted text-xs leading-tight">Без лимитов, мгновенная поддержка</p>
+                    </div>
+                  </div>
+                  <div className="text-primary group-hover:translate-x-1 transition-all">
+                    <FiArrowLeft className="rotate-180" size={20} />
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setSelectedType('promo_choice')}
+                  className="w-full py-4 text-text-muted hover:text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <FiGift size={16} /> У меня есть промокод
                 </button>
               </div>
-            </div>
+            ) : selectedType === 'vip_choice' || selectedType === 'vip' ? (
+              /* Step 2: VIP Packages */
+              <div className="animate-fade-in">
+                <button 
+                  onClick={() => setSelectedType(null)}
+                  className="flex items-center gap-2 text-text-muted hover:text-white text-sm mb-4 transition-colors"
+                >
+                  <FiArrowLeft size={16} /> Назад к выбору
+                </button>
+
+                <div className="glass rounded-2xl p-5 border-primary/30 bg-primary/[0.03]">
+                  <div className="flex items-center gap-2 mb-6">
+                    <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
+                      <FiStar size={18} className="fill-current" />
+                    </div>
+                    <h4 className="text-white font-bold">Выберите пакет VIP голосов</h4>
+                  </div>
+
+                  {voteResult === 'error' && selectedType === 'vip' && (
+                    <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 flex items-center gap-2 mb-4">
+                      <FiAlertCircle className="text-danger shrink-0" size={16} />
+                      <p className="text-danger text-xs">{error}</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    {vipPackages.map((pkg) => (
+                      <button
+                        key={pkg.count}
+                        onClick={() => handleVipVote(pkg)}
+                        disabled={loading}
+                        className={`relative p-4 rounded-2xl border text-center transition-all duration-300 disabled:opacity-50 ${
+                          pkg.popular
+                            ? 'border-primary bg-primary/20 shadow-lg shadow-primary/10 scale-[1.02]'
+                            : 'border-white/10 bg-white/[0.02] hover:border-primary/50 hover:bg-white/[0.05]'
+                        }`}
+                        id={`vote-vip-${pkg.count}`}
+                      >
+                        {pkg.popular && (
+                          <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[9px] gradient-bg text-white px-3 py-1 rounded-full font-black tracking-tighter uppercase">
+                            HOT
+                          </span>
+                        )}
+                        {pkg.save && (
+                          <span className="absolute -top-2.5 right-1 text-[9px] bg-success text-white px-2 py-1 rounded-full font-black">
+                            -{pkg.save}
+                          </span>
+                        )}
+                        <div className="text-white font-black text-2xl mb-0.5">{pkg.count}</div>
+                        <div className="text-text-muted text-[10px] uppercase tracking-widest font-bold mb-3">Голосов</div>
+                        <div className="text-warning font-black text-sm">{formatPrice(pkg.price)} сум</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Manual Input Section */}
+                  <div className="pt-4 border-t border-white/10 mb-6">
+                    <p className="text-text-muted text-[10px] font-black uppercase tracking-widest mb-3 text-center opacity-70">Или своё количество (от 1 до 10,000)</p>
+                    <div className="flex flex-col gap-2">
+                       <div className="relative group">
+                         <input 
+                           type="number" 
+                           value={customVoteCount}
+                           onChange={(e) => setCustomVoteCount(Math.max(1, Math.min(10000, parseInt(e.target.value) || 0)))}
+                           className="w-full bg-surface-card border-2 border-white/10 rounded-2xl px-4 py-4 text-white font-black text-center text-2xl focus:border-primary transition-all outline-none"
+                           min="1"
+                           max="10000"
+                           placeholder="Например: 1000"
+                         />
+                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted text-xs font-bold uppercase tracking-widest pointer-events-none">
+                           Голосов
+                         </span>
+                       </div>
+                       <button
+                         onClick={() => handleVipVote(customVoteCount)}
+                         disabled={loading || customVoteCount < 1}
+                         className="w-full gradient-bg text-white py-4 rounded-2xl font-black text-lg hover:opacity-90 transition-all flex flex-col items-center justify-center shadow-xl shadow-primary/20"
+                       >
+                         <span className="text-xs uppercase tracking-[3px] opacity-80 mb-0.5">Оплатить и подтвердить</span>
+                         <span>{formatPrice(calculatePrice(customVoteCount))} сум</span>
+                         {customVoteCount >= 50 && (
+                           <span className="absolute -bottom-2 bg-success text-white text-[9px] px-3 py-1 rounded-full font-black uppercase shadow-lg">
+                             Лучшая цена: 7000 сум за голос
+                           </span>
+                         )}
+                       </button>
+                    </div>
+                  </div>
+
+                  {loading && selectedType === 'vip' && (
+                    <div className="flex items-center justify-center gap-3 py-4 text-warning">
+                      <div className="w-5 h-5 border-2 border-warning/30 border-t-warning rounded-full animate-spin"></div>
+                      <span className="text-sm font-bold uppercase tracking-wider">Ожидание оплаты...</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-center gap-4 pt-4 border-t border-white/5 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
+                    <span className="text-[10px] text-text-muted font-bold uppercase">Через:</span>
+                    <span className="text-xs font-bold text-white">Payme</span>
+                    <span className="text-xs font-bold text-white">Click</span>
+                    <span className="text-xs font-bold text-white">Uzum</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Step 2: Promo Code */
+              <div className="animate-fade-in">
+                <button 
+                  onClick={() => setSelectedType(null)}
+                  className="flex items-center gap-2 text-text-muted hover:text-white text-sm mb-4 transition-colors"
+                >
+                  <FiArrowLeft size={16} /> Назад
+                </button>
+
+                <div className="glass rounded-2xl p-6">
+                  <div className="text-center mb-6">
+                    <div className="w-16 h-16 rounded-2xl bg-white/[0.03] flex items-center justify-center mx-auto mb-3">
+                      <FiGift className="text-primary" size={32} />
+                    </div>
+                    <h4 className="text-white font-bold">Промокод от спонсора</h4>
+                    <p className="text-text-muted text-xs">Введите секретный код для получения голоса</p>
+                  </div>
+
+                  {voteResult === 'error' && selectedType === 'promo' && (
+                    <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 flex items-center gap-2 mb-4">
+                      <FiAlertCircle className="text-danger shrink-0" size={16} />
+                      <p className="text-danger text-xs">{error}</p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-3">
+                    <input
+                      type="text"
+                      value={promoCode}
+                      onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                      placeholder="XXXX-XXXX"
+                      className="w-full bg-surface border border-white/10 rounded-xl px-4 py-4 text-white text-center text-xl font-mono focus:outline-none focus:border-primary transition-all tracking-[4px]"
+                      id="promo-code-input"
+                    />
+                    <button
+                      onClick={handlePromoVote}
+                      disabled={loading || !promoCode.trim()}
+                      className="w-full gradient-bg text-white font-bold py-4 rounded-xl hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      id="promo-vote-btn"
+                    >
+                      {loading && selectedType === 'promo' ? (
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      ) : (
+                        <>Применить код</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

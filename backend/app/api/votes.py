@@ -100,15 +100,15 @@ async def cast_vote(
         promo = promo_result.scalar_one_or_none()
         if not promo:
             raise HTTPException(status_code=400, detail="Invalid promo code")
-        if promo.used_count >= promo.max_uses:
-            raise HTTPException(status_code=400, detail="Promo code fully used")
+        if promo.used_count + data.count > promo.max_uses:
+            raise HTTPException(status_code=400, detail="Promo code usage limit exceeded for this amount")
         if promo.expires_at and promo.expires_at < datetime.utcnow():
             raise HTTPException(status_code=400, detail="Promo code expired")
 
-        promo.used_count += 1
+        promo.used_count += data.count
 
     elif data.vote_type == "coin":
-        coin_cost = 10  # configurable
+        coin_cost = 10 * data.count
         if user.coins < coin_cost:
             raise HTTPException(status_code=400, detail="Not enough coins")
         user.coins -= coin_cost
@@ -118,7 +118,7 @@ async def cast_vote(
         # For now, mark as needing payment
         pass
 
-    # Create vote
+    # Create vote(s)
     vote_type_enum = {
         "free": VoteType.FREE,
         "vip": VoteType.VIP,
@@ -129,25 +129,26 @@ async def cast_vote(
     if not vote_type_enum:
         raise HTTPException(status_code=400, detail="Invalid vote type")
 
-    vote = Vote(
-        user_id=user_id,
-        blogger_id=data.blogger_id,
-        vote_type=vote_type_enum,
-        country=user.country,
-        ip_address=ip_address,
-        device_id=device_id,
-        payment_id=payment_id,
-    )
-    db.add(vote)
+    # Bulk create votes
+    for _ in range(data.count):
+        new_vote = Vote(
+            user_id=user_id,
+            blogger_id=data.blogger_id,
+            vote_type=vote_type_enum,
+            country=user.country,
+            ip_address=ip_address,
+            device_id=device_id,
+            payment_id=payment_id,
+        )
+        db.add(new_vote)
 
     # Update blogger vote count
-    blogger.total_votes += 1
+    blogger.total_votes += data.count
 
     await db.flush()
 
     return {
-        "message": "Vote cast successfully",
-        "vote_id": vote.id,
+        "message": f"{data.count} vote(s) cast successfully",
         "blogger_id": blogger.id,
         "vote_type": data.vote_type,
         "total_votes": blogger.total_votes,

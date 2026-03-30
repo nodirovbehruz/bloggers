@@ -9,7 +9,7 @@ from app.core.security import get_admin_user
 from app.models.models import (
     User, Blogger, BloggerStatus, Vote, VoteType, Category,
     Payment, PaymentStatus, PromoCode, Sponsor, Banner, AdminLog,
-    ContestSettings as ContestSettingsModel
+    ContestSettings as ContestSettingsModel, ContestSession, Winner
 )
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -521,3 +521,97 @@ async def update_settings(
     db.add(log)
 
     return {"message": "Settings updated", "changes": changes}
+
+
+@router.post("/contest/finish", summary="Finish current contest and selection winners")
+async def finish_contest(
+    data: dict,  # {"title": "Spring 2026"}
+    admin: dict = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Manually finish the current contest, archive winners and reset votes.
+    """
+    settings_res = await db.execute(select(ContestSettingsModel).where(ContestSettingsModel.id == 1))
+    settings = settings_res.scalar_one_or_none()
+
+    if not settings or not settings.contest_active:
+        raise HTTPException(status_code=400, detail="No active contest found")
+
+    # 1. Categories
+    cat_res = await db.execute(select(Category))
+    categories = cat_res.scalars().all()
+
+    # 2. Find winners
+    winners_to_add = []
+    session_title = data.get("title", f"Конкурс {datetime.utcnow().strftime('%Y-%m-%d')}")
+
+    # Start date from settings
+    try:
+        sd = datetime.fromisoformat(settings.start_date.replace('Z', ''))
+    except Exception:
+        sd = datetime.utcnow()
+
+    session = ContestSession(
+        title=session_title,
+        start_date=sd,
+        end_date=datetime.utcnow(),
+        status="completed"
+    )
+    db.add(session)
+    await db.flush() # Get session ID
+
+    for cat in categories:
+        # Find blogger with max votes in this category
+        blogger_res = await db.execute(
+            select(Blogger)
+            .where(Blogger.category_id == cat.id, Blogger.status == BloggerStatus.APPROVED)
+            .order_by(desc(Blogger.total_votes))
+            .limit(1)
+        )
+        winner_blogger = blogger_res.scalar_one_or_none()
+
+        if winner_blogger and winner_blogger.total_votes > 0:
+            winner = Winner(
+                session_id=session.id,
+                blogger_id=winner_blogger.id,
+                category_id=cat.id,
+                total_votes=winner_blogger.total_votes,
+                rank=1
+            )
+            winners_to_add.append(winner)
+
+    if winners_to_add:
+        db.add_all(winners_to_add)
+
+    # 3. Reset all approved bloggers' total_votes for the next round
+    await db.execute(update(Blogger).values(total_votes=0))
+
+    # 4. Deactivate contest
+    settings.contest_active = False
+
+    log = AdminLog(
+        admin_id=int(admin["sub"]),
+        action="finish_contest",
+        target_type="contest",
+        target_id=session.id,
+        details={"title": session_title, "winners_count": len(winners_to_add)}
+    )
+    db.add(log)
+    await db.commit()
+
+    return {
+        "message": "Contest finished successfully",
+        "session_id": session.id,
+        "winners_count": len(winners_to_add)
+    }
+
+
+@router.get("/contest/sessions", summary="Get all contest sessions")
+async def get_admin_contest_sessions(
+    admin: dict = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all past and current contest sessions."""
+    result = await db.execute(select(ContestSession).order_by(desc(ContestSession.end_date)))
+    return result.scalars().all()

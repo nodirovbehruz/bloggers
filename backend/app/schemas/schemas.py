@@ -101,6 +101,7 @@ class BloggerListResponse(BaseModel):
 class VoteCreate(BaseModel):
     blogger_id: int
     vote_type: str  # "free", "vip", "coin", "promo"
+    count: int = Field(1, ge=1, le=10000)
     promo_code: Optional[str] = None
     payment_method: Optional[str] = None  # "payme", "click", "uzum"
 

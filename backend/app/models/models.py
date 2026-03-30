@@ -254,3 +254,32 @@ class ContestSettings(Base):
     sms_provider = Column(String(50), default="eskiz")
     bot_protection = Column(Boolean, default=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ContestSession(Base):
+    __tablename__ = "contest_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=False, index=True)
+    status = Column(String(20), default="completed")  # "active", "completed"
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    winners = relationship("Winner", back_populates="session")
+
+
+class Winner(Base):
+    __tablename__ = "winners"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("contest_sessions.id"), nullable=False)
+    blogger_id = Column(Integer, ForeignKey("bloggers.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    total_votes = Column(Integer, nullable=False)
+    rank = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("ContestSession", back_populates="winners")
+    blogger = relationship("Blogger")
+    category = relationship("Category")

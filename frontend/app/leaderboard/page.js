@@ -72,18 +72,6 @@ export default function LeaderboardPage() {
             🥇
           </div>
         );
-      case 2:
-        return (
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-gray-300 to-gray-500 flex items-center justify-center text-2xl font-bold text-white shadow-lg shadow-gray-400/30">
-            🥈
-          </div>
-        );
-      case 3:
-        return (
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center text-2xl font-bold text-white shadow-lg shadow-amber-600/30">
-            🥉
-          </div>
-        );
       default:
         return (
           <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full glass flex items-center justify-center text-lg font-bold text-text-secondary">
@@ -261,7 +249,7 @@ export default function LeaderboardPage() {
                     key={blogger.id}
                     href={`/blogger/${blogger.id}`}
                     className={`block glass rounded-xl p-4 card-hover animate-slide-up ${
-                      rank <= 3 ? 'gradient-border' : ''
+                      rank === 1 ? 'gradient-border' : ''
                     }`}
                     style={{ animationDelay: `${0.05 * i}s` }}
                     id={`leaderboard-${blogger.id}`}

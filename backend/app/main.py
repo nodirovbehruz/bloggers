@@ -6,7 +6,7 @@ import os
 
 from app.core.config import settings
 from app.core.database import init_db, async_session
-from app.api import auth, bloggers, votes, categories, admin, sponsors
+from app.api import auth, bloggers, votes, categories, admin, sponsors, contests
 
 
 async def create_default_admin():
@@ -74,6 +74,7 @@ app.include_router(votes.router, prefix="/api/v1")
 app.include_router(categories.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(sponsors.router, prefix="/api/v1")
+app.include_router(contests.router, prefix="/api/v1")
 
 
 @app.get("/", tags=["Health"])

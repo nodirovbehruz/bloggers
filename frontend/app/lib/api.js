@@ -1,6 +1,6 @@
 // API Client for connecting frontend to backend
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
 
 class ApiClient {
   constructor() {
@@ -40,6 +40,12 @@ class ApiClient {
       const data = await response.json();
 
       if (!response.ok) {
+        if (response.status === 401) {
+          this.userLogout();
+          if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+            window.location.href = `/login?redirect=${window.location.pathname}`;
+          }
+        }
         throw { status: response.status, detail: data.detail || 'Request failed' };
       }
 
@@ -265,6 +271,20 @@ class ApiClient {
 
   async deleteSponsor(id) {
     return this.request(`/sponsors/${id}`, { method: 'DELETE' });
+  }
+
+  // Contests
+  async getContestSessions() {
+    return this.request('/contests/sessions');
+  }
+
+  async getWinners(sessionId = null) {
+    const query = sessionId ? `?session_id=${sessionId}` : '';
+    return this.request(`/contests/winners${query}`);
+  }
+
+  async finishContest(title) {
+    return this.request('/admin/contest/finish', { method: 'POST', body: JSON.stringify({ title }) });
   }
 }
 

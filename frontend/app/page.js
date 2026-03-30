@@ -6,7 +6,7 @@ import CountdownTimer from './components/CountdownTimer';
 import BloggerCard from './components/BloggerCard';
 import api from './lib/api';
 import { contestInfo } from './lib/mockData';
-import { FiArrowRight, FiUsers, FiHeart, FiAward, FiTrendingUp, FiClock, FiUser } from 'react-icons/fi';
+import { FiArrowRight, FiUsers, FiHeart, FiAward, FiTrendingUp, FiClock, FiUser, FiStar } from 'react-icons/fi';
 import { CategoryIcon } from './lib/categoryIcons';
 import AnimatedCounter from './components/AnimatedCounter';
 import { useLanguage } from './contexts/LanguageContext';
@@ -17,6 +17,10 @@ export default function HomePage() {
   const [bloggers, setBloggers] = useState([]);
   const [categories, setCategories] = useState([]);
   const [sponsors, setSponsors] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [selectedSessionId, setSelectedSessionId] = useState(null);
+  const [pastWinners, setPastWinners] = useState([]);
+  const [loadingWinners, setLoadingWinners] = useState(false);
   const [statsData, setStatsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const { t, localizedName, localizedDesc } = useLanguage();
@@ -47,16 +51,23 @@ export default function HomePage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [bloggersRes, categoriesRes, sponsorsRes] = await Promise.all([
+        const [bloggersRes, categoriesRes, sponsorsRes, sessionsRes] = await Promise.all([
           api.getBloggers({ page: 1, per_page: 20 }).catch(() => ({ bloggers: [] })),
           api.getCategories().catch(() => []),
           api.getSponsors().catch(() => []),
+          api.getContestSessions().catch(() => []),
         ]);
 
         setBloggers(bloggersRes.bloggers || []);
         const cats = Array.isArray(categoriesRes) ? categoriesRes : [];
         setCategories(cats);
         setSponsors(Array.isArray(sponsorsRes) ? sponsorsRes : []);
+        const sess = Array.isArray(sessionsRes) ? sessionsRes : [];
+        setSessions(sess);
+
+        if (sess.length > 0) {
+          setSelectedSessionId(sess[0].id);
+        }
 
         const totalBloggers = bloggersRes.total || bloggersRes.bloggers?.length || 0;
         const totalVotes = (bloggersRes.bloggers || []).reduce((s, b) => s + (b.total_votes || 0), 0);
@@ -69,6 +80,16 @@ export default function HomePage() {
     };
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      setLoadingWinners(true);
+      api.getWinners(selectedSessionId)
+        .then(res => setPastWinners(Array.isArray(res) ? res : []))
+        .catch(() => setPastWinners([]))
+        .finally(() => setLoadingWinners(false));
+    }
+  }, [selectedSessionId]);
 
   const topBloggers = [...bloggers].sort((a, b) => (b.total_votes || 0) - (a.total_votes || 0)).slice(0, 6);
 
@@ -346,23 +367,134 @@ export default function HomePage() {
             <CountdownTimer targetDate={contestInfo.endDate} />
           </div>
 
-          {/* Stats — inline in hero */}
-          <div
-            className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 w-full max-w-3xl mt-16 px-4"
-          >
-            {stats.map((stat, i) => (
-              <div
-                key={i}
-                className="text-center p-4 sm:p-5 rounded-xl"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
+          {/* Partners/Sponsors Section instead of Stats */}
+          <div className="w-full max-w-6xl mt-24 px-4 animate-fade-up">
+            <div className="flex flex-col items-center mb-12">
+              <div className="w-16 h-[1.5px] bg-primary/60 mb-6"></div>
+              <h2
+                className="text-white text-center opacity-70 uppercase tracking-[6px]"
+                style={{
+                  fontFamily: "'Montserrat', sans-serif",
+                  fontWeight: 300,
+                  fontSize: '13px',
+                }}
               >
-                <div className={`text-2xl mb-2 ${stat.color} flex justify-center`}>{stat.icon}</div>
-                <div className="text-xl sm:text-2xl font-bold text-white mb-0.5" style={{ fontFamily: 'Inter, sans-serif' }}>
-                  <AnimatedCounter value={stat.value} duration={2000} />
+                {t('home_sponsors')}
+              </h2>
+            </div>
+            
+            {/* Featured Partners Grid */}
+            <div
+              className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8 w-full mb-16"
+            >
+              {sponsors.length > 0 ? (
+                sponsors.slice(0, 4).map((sponsor, i) => {
+                  const logoSrc = sponsor.logo_url ? (
+                    sponsor.logo_url.startsWith('/uploads') ? `${API_BASE}${sponsor.logo_url}` : sponsor.logo_url
+                  ) : null;
+                  
+                  return (
+                    <a
+                      key={i}
+                      href={sponsor.website_url || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group flex flex-col items-center justify-center p-10 rounded-[32px] transition-all duration-500 hover:bg-white/5 border border-white/5 hover:border-primary/40 shadow-2xl"
+                      style={{ 
+                        background: 'rgba(255,255,255,0.024)', 
+                        height: '200px'
+                      }}
+                    >
+                      {logoSrc ? (
+                        <img
+                          src={logoSrc}
+                          alt={sponsor.name}
+                          className="max-h-24 w-auto object-contain grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700 scale-95 group-hover:scale-110"
+                        />
+                      ) : (
+                        <span className="text-white opacity-40 font-bold text-lg text-center uppercase tracking-[2px]">
+                          {localizedName(sponsor)}
+                        </span>
+                      )}
+                    </a>
+                  );
+                })
+              ) : (
+                [1, 2, 3, 4].map((n) => (
+                  <div
+                    key={n}
+                    className="flex items-center justify-center p-10 rounded-[32px] opacity-10"
+                    style={{ background: 'rgba(255,255,255,0.024)', border: '1px solid rgba(255,255,255,0.05)', height: '200px' }}
+                  >
+                    <div className="w-40 h-8 bg-white/20 rounded-full animate-pulse"></div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Seamless Infinite Ribbon (Marquee) — Back per request! */}
+            {sponsors.length > 0 && (
+              <div className="relative w-full overflow-hidden py-14 mt-8">
+                <div className="absolute left-0 top-0 bottom-0 w-48 z-10 bg-gradient-to-r from-[#101217] to-transparent pointer-events-none"></div>
+                <div className="absolute right-0 top-0 bottom-0 w-48 z-10 bg-gradient-to-l from-[#101217] to-transparent pointer-events-none"></div>
+
+                <div className="flex w-max animate-scroll-left hover:[animation-play-state:paused] cursor-pointer">
+                  {[...sponsors, ...sponsors, ...sponsors, ...sponsors].map((s, i) => {
+                    const logo = s.logo_url ? (
+                      s.logo_url.startsWith('/uploads') ? `${API_BASE}${s.logo_url}` : s.logo_url
+                    ) : null;
+                    return (
+                      <div key={i} className="flex items-center justify-center px-16 group transition-all duration-300">
+                        {logo ? (
+                          <img 
+                            src={logo} 
+                            alt={s.name} 
+                            className="h-12 w-auto object-contain opacity-20 group-hover:opacity-70 transition-opacity" 
+                          />
+                        ) : (
+                          <span className="text-white/10 group-hover:text-white/50 font-black uppercase tracking-tighter text-2xl italic">
+                            {localizedName(s)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="text-gray-500 text-xs">{stat.label}</div>
               </div>
-            ))}
+            )}
+
+            {/* Dynamic Stats Row */}
+            {statsData && (
+              <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 w-full max-w-4xl mx-auto">
+                <div className="flex flex-col items-center p-6 rounded-3xl bg-white/[0.03] border border-white/[0.05] hover:border-primary/20 transition-colors group">
+                  <span className="text-3xl md:text-4xl font-black text-white mb-1 group-hover:text-primary transition-colors" style={{ fontFamily: 'Inter, sans-serif' }}>
+                    <AnimatedCounter value={statsData.totalBloggers || 0} />
+                  </span>
+                  <span className="text-gray-500 text-xs uppercase tracking-widest font-bold">{t('stats_bloggers')}</span>
+                </div>
+                
+                <div className="flex flex-col items-center p-6 rounded-3xl bg-white/[0.03] border border-white/[0.05] hover:border-vote-free/20 transition-colors group">
+                  <span className="text-3xl md:text-4xl font-black text-vote-free mb-1 group-hover:drop-shadow-[0_0_10px_rgba(239,68,68,0.3)] transition-all" style={{ fontFamily: 'Inter, sans-serif' }}>
+                    <AnimatedCounter value={statsData.totalVotes || 0} />
+                  </span>
+                  <span className="text-gray-500 text-xs uppercase tracking-widest font-bold">{t('stats_votes')}</span>
+                </div>
+                
+                <div className="flex flex-col items-center p-6 rounded-3xl bg-white/[0.03] border border-white/[0.05] hover:border-warning/20 transition-colors group">
+                  <span className="text-3xl md:text-4xl font-black text-warning mb-1 group-hover:drop-shadow-[0_0_10px_rgba(245,158,11,0.3)] transition-all" style={{ fontFamily: 'Inter, sans-serif' }}>
+                    <AnimatedCounter value={statsData.totalCategories || 0} />
+                  </span>
+                  <span className="text-gray-500 text-xs uppercase tracking-widest font-bold">{t('stats_categories')}</span>
+                </div>
+                
+                <div className="flex flex-col items-center p-6 rounded-3xl bg-white/[0.03] border border-white/[0.05] hover:border-success/20 transition-colors group">
+                  <span className="text-3xl md:text-4xl font-black text-success mb-1 group-hover:drop-shadow-[0_0_10px_rgba(34,197,94,0.3)] transition-all" style={{ fontFamily: 'Inter, sans-serif' }}>
+                    24/7
+                  </span>
+                  <span className="text-gray-500 text-xs uppercase tracking-widest font-bold">{t('stats_voting')}</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -465,176 +597,136 @@ export default function HomePage() {
       </section>
 
       {/* ===== TOP BLOGGERS SECTION ===== */}
-      <section className="py-20 animate-section" ref={addSectionRef} style={{ background: 'rgba(18, 22, 32, 0.5)' }}>
+      <section className="py-24 bg-[#0a0c10]/40 animate-section" ref={addSectionRef}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between mb-12">
-            <h2
-              className="text-white"
-              style={{
-                fontFamily: "'Montserrat', sans-serif",
-                fontWeight: 300,
-                fontSize: 'clamp(24px, 3.5vw, 48px)',
-                lineHeight: '36px',
-                letterSpacing: '0.4px',
-              }}
-            >
-              {t('home_top_bloggers').toUpperCase()}
-            </h2>
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+            <div>
+              <h2
+                className="text-white mb-4"
+                style={{
+                  fontFamily: "'Montserrat', sans-serif",
+                  fontWeight: 300,
+                  fontSize: 'clamp(32px, 5vw, 56px)',
+                  lineHeight: '1.1',
+                  letterSpacing: '-1px',
+                }}
+              >
+                {t('home_top_bloggers')}
+              </h2>
+              <div className="w-20 h-1 bg-primary"></div>
+            </div>
             <Link
               href="/leaderboard"
-              className="hidden sm:inline-flex items-center gap-2 text-white font-semibold px-6 py-3 rounded-full hover:opacity-90 transition-opacity"
-              style={{ background: '#9810FA', fontFamily: 'Inter, sans-serif' }}
+              className="group flex items-center gap-3 text-white/60 hover:text-white transition-colors"
+              style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, fontSize: '18px' }}
             >
-              {t('nav_leaderboard')} <FiArrowRight />
+              {t('home_view_all')}
+              <FiArrowRight className="transition-transform group-hover:translate-x-2" />
             </Link>
           </div>
 
-          {loading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6">
-              {[1,2,3,4,5,6].map(i => (
-                <div key={i} className="h-64 rounded-2xl bg-[#141C31] animate-pulse"></div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6">
-              {topBloggers.map((blogger, i) => (
-                <div key={blogger.id} className="animate-section" ref={addSectionRef} style={{ transitionDelay: `${i * 0.08}s` }}>
-                  <BloggerCard blogger={{
-                    id: blogger.id,
-                    name: blogger.full_name,
-                    nickname: blogger.nickname,
-                    avatar: blogger.avatar_url,
-                    votes: blogger.total_votes || 0,
-                    category: categories.find(c => c.id === blogger.category_id)?.slug || '',
-                    categoryName: localizedName(categories.find(c => c.id === blogger.category_id)) || '',
-                  }} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="text-center mt-8 sm:hidden">
-            <Link
-              href="/leaderboard"
-              className="inline-flex items-center gap-2 text-white font-semibold px-6 py-3 rounded-full"
-              style={{ background: '#9810FA' }}
-            >
-              {t('nav_leaderboard')} <FiArrowRight />
-            </Link>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {loading ? (
+              [1, 2, 3, 4].map(i => (
+                <div key={i} className="aspect-[3/4] rounded-2xl bg-[#141C31] animate-pulse"></div>
+              ))
+            ) : (
+              bloggers.slice(0, 4).map((blogger, index) => {
+                const category = categories.find(c => c.id === blogger.category_id);
+                return (
+                  <BloggerCard 
+                    key={blogger.id} 
+                    blogger={{
+                      ...blogger,
+                      name: blogger.full_name,
+                      votes: blogger.total_votes,
+                      avatar: blogger.avatar_url,
+                      categoryName: localizedName(category),
+                      rank: index + 1
+                    }} 
+                  />
+                );
+              })
+            )}
           </div>
         </div>
       </section>
 
-      {/* ===== SPONSORS SECTION ===== */}
-      {sponsors.length > 0 && (
-        <section className="py-24 animate-section" ref={addSectionRef}>
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-            {/* Section title */}
-            <h2
-              className="text-center text-white mb-4"
-              style={{
-                fontFamily: "'Montserrat', sans-serif",
-                fontWeight: 300,
-                fontSize: 'clamp(24px, 4vw, 42px)',
-                lineHeight: '48px',
-                letterSpacing: '0.4px',
-              }}
-            >
-              {t('home_sponsors').toUpperCase()}
-            </h2>
-            <p
-              className="text-center mb-14"
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontSize: '16px',
-                color: 'rgba(255,255,255,0.4)',
-              }}
-            >
-              {t('footer_about')}
-            </p>
-
-            {/* Sponsor cards grid */}
-            <div className={`grid gap-5 mb-16 ${sponsors.length <= 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
-              {sponsors.map((sponsor) => {
-                const logoSrc = sponsor.logo_url?.startsWith('/uploads')
-                  ? `${API_BASE}${sponsor.logo_url}`
-                  : sponsor.logo_url;
-                return (
-                  <a
-                    key={sponsor.id}
-                    href={sponsor.website_url || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex flex-col items-center justify-center p-8 sm:p-10 rounded-2xl transition-all duration-300"
-                    style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                      e.currentTarget.style.borderColor = 'rgba(152,16,250,0.3)';
-                      e.currentTarget.style.transform = 'translateY(-4px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    {logoSrc ? (
-                      <img
-                        src={logoSrc}
-                        alt={sponsor.name}
-                        className="w-auto object-contain mb-5 transition-transform duration-300 group-hover:scale-105"
-                        style={{ height: '80px', maxWidth: '180px' }}
-                        onError={(e) => { e.target.style.display = 'none'; if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'block'; }}
-                      />
-                    ) : null}
-                    <span
-                      className="text-white font-semibold text-lg"
-                      style={{
-                        fontFamily: 'Inter, sans-serif',
-                        display: logoSrc ? 'none' : 'block',
-                      }}
-                    >
-                      {localizedName(sponsor)}
-                    </span>
-                    <span
-                      className="text-sm mt-3"
-                      style={{ color: 'rgba(255,255,255,0.35)', fontFamily: 'Inter, sans-serif' }}
-                    >
-                      {localizedName(sponsor)}
-                    </span>
-                  </a>
-                );
-              })}
-            </div>
-
-            {/* Scrolling marquee below */}
-            <div className="relative overflow-hidden" style={{ height: '50px' }}>
-              <div
-                className="absolute left-0 top-0 bottom-0 z-10 pointer-events-none"
-                style={{ width: '100px', background: 'linear-gradient(to right, #0f0f1a 0%, transparent 100%)' }}
-              ></div>
-              <div
-                className="absolute right-0 top-0 bottom-0 z-10 pointer-events-none"
-                style={{ width: '100px', background: 'linear-gradient(to left, #0f0f1a 0%, transparent 100%)' }}
-              ></div>
-              <div
-                className="flex items-center h-full gap-0 sponsor-marquee"
-                style={{ animation: 'marquee-right 25s linear infinite', width: 'max-content' }}
-              >
-                {[...sponsors, ...sponsors, ...sponsors, ...sponsors, ...sponsors, ...sponsors, ...sponsors, ...sponsors].map((s, i) => (
-                  <span key={`m-${i}`} className="shrink-0 px-6 text-sm whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.15)', fontFamily: 'Inter', fontWeight: 500 }}>
-                    {localizedName(s)}  ·
-                  </span>
-                ))}
-              </div>
-            </div>
+      {/* ===== PAST WINNERS SECTION ===== */}
+      <section className="py-24 bg-black/20 animate-section" ref={addSectionRef}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <p className="text-primary font-black uppercase tracking-[4px] text-[10px] mb-3">Хронология побед</p>
+            <h2 className="text-white text-3xl font-heading font-black mb-4 uppercase tracking-[2px]">Архив конкурсов</h2>
+            <div className="w-20 h-1 bg-primary mx-auto mb-10"></div>
           </div>
-        </section>
-      )}
+          
+          {sessions.length > 0 ? (
+            <div className="space-y-12">
+               {/* Session Selector Chips */}
+               <div className="flex flex-wrap justify-center gap-3">
+                  {sessions.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setSelectedSessionId(s.id)}
+                      className={`px-6 py-3 rounded-2xl text-sm font-bold transition-all border ${
+                        selectedSessionId === s.id 
+                        ? 'bg-primary border-primary text-white shadow-lg shadow-primary/30 scale-105' 
+                        : 'bg-white/5 border-white/10 text-text-muted hover:bg-white/10'
+                      }`}
+                    >
+                      {s.title}
+                    </button>
+                  ))}
+               </div>
+
+               {/* Winners Grid for Selected Session */}
+               {loadingWinners ? (
+                 <div className="flex justify-center py-20">
+                    <div className="w-10 h-10 border-2 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+                 </div>
+               ) : pastWinners.length > 0 ? (
+                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-in">
+                    {pastWinners.map((winner, idx) => (
+                      <div key={idx} className="glass-dark rounded-3xl p-8 relative overflow-hidden group hover:bg-white/[0.04] transition-all">
+                        <div className="flex items-center gap-5 relative z-10">
+                          <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-primary/40 group-hover:border-primary transition-colors">
+                             <img 
+                               src={winner.blogger_avatar?.startsWith('/uploads') ? `${API_BASE}${winner.blogger_avatar}` : (winner.blogger_avatar || '/bloggers/b1.png')} 
+                               alt="" 
+                               className="w-full h-full object-cover transition-transform group-hover:scale-110" 
+                             />
+                          </div>
+                          <div>
+                             <div className="text-white font-bold text-lg leading-tight mb-1 group-hover:text-primary transition-colors">{winner.blogger_name}</div>
+                             <div className="text-primary text-[10px] font-black uppercase tracking-widest">{winner.category_name}</div>
+                          </div>
+                        </div>
+                        <div className="mt-8 flex items-center justify-between relative z-10">
+                          <div className="text-text-muted text-xs">
+                             <span className="opacity-50">Всего голосов:</span> <br/>
+                             <span className="text-white font-black text-sm">{winner.total_votes.toLocaleString()}</span>
+                          </div>
+                          <div className="bg-primary/20 text-primary border border-primary/30 px-4 py-1.5 rounded-full text-[10px] font-black tracking-[2px] uppercase group-hover:bg-primary group-hover:text-white transition-all">
+                             Winner
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                 </div>
+               ) : (
+                 <div className="text-center py-16 opacity-30 italic">В этом этапе пока нет зафиксированных результатов</div>
+               )}
+            </div>
+          ) : (
+             <div className="text-center py-20 bg-white/[0.02] rounded-3xl border border-dashed border-white/5 max-w-2xl mx-auto">
+                <FiAward size={64} className="mx-auto mb-6 text-white/5" />
+                <h4 className="text-white/40 font-bold mb-2">История побед</h4>
+                <p className="text-white/20 text-sm">Здесь появятся лучшие блогеры после завершения первого этапа конкурса</p>
+             </div>
+          )}
+        </div>
+      </section>
 
       {/* ===== CTA SECTION ===== */}
       <section className="py-28 relative animate-section" ref={addSectionRef}>

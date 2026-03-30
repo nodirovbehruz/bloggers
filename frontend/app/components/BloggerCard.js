@@ -5,6 +5,7 @@ import { FiHeart } from 'react-icons/fi';
 
 export default function BloggerCard({ blogger, variant = 'default' }) {
   const formatVotes = (n) => {
+    if (n === undefined || n === null) return '0';
     if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
     return n.toString();
   };
@@ -16,12 +17,12 @@ export default function BloggerCard({ blogger, variant = 'default' }) {
           {blogger.rank}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-white truncate">{blogger.name}</p>
+          <p className="text-sm font-semibold text-white truncate">{blogger.full_name || blogger.name}</p>
           <p className="text-xs text-text-muted">{blogger.nickname}</p>
         </div>
         <div className="flex items-center gap-1 text-vote-free shrink-0">
           <FiHeart size={14} className="fill-current" />
-          <span className="text-sm font-semibold">{formatVotes(blogger.votes)}</span>
+          <span className="text-sm font-semibold">{formatVotes(blogger.total_votes || blogger.votes)}</span>
         </div>
       </div>
     );
@@ -40,10 +41,10 @@ export default function BloggerCard({ blogger, variant = 'default' }) {
         <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/20"></div>
         
         {/* Avatar image */}
-        {blogger.avatar && (
+        {(blogger.avatar_url || blogger.avatar) && (
           <img 
-            src={getAvatarSrc(blogger.avatar)} 
-            alt={blogger.name}
+            src={getAvatarSrc(blogger.avatar_url || blogger.avatar)} 
+            alt={blogger.full_name || blogger.name}
             className="absolute inset-0 w-full h-full object-cover"
             onError={(e) => { e.target.style.display = 'none'; }}
           />
@@ -61,12 +62,12 @@ export default function BloggerCard({ blogger, variant = 'default' }) {
         {/* Vote count */}
         <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 text-white">
           <FiHeart size={16} className="fill-vote-free text-vote-free" />
-          <span className="text-sm font-bold">{formatVotes(blogger.votes)}</span>
+          <span className="text-sm font-bold">{formatVotes(blogger.total_votes || blogger.votes)}</span>
         </div>
 
         {/* Content overlay */}
         <div className="absolute bottom-0 left-0 right-0 z-20 p-4">
-          <h3 className="text-white font-semibold text-base mb-0.5">{blogger.name}</h3>
+          <h3 className="text-white font-semibold text-base mb-0.5">{blogger.full_name || blogger.name}</h3>
           <p className="text-text-secondary text-sm">{blogger.nickname}</p>
         </div>
       </div>
